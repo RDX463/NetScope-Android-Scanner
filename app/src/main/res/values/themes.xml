@@ -3,6 +3,8 @@
     <style name="Base.Theme.NetScope" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Customize your light theme here. -->
         <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+        <item name="android:statusBarColor">@color/terminal_black</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 
     <style name="Theme.NetScope" parent="Base.Theme.NetScope" />

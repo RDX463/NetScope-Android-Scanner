@@ -3,36 +3,65 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="20dp"
-    android:gravity="center_horizontal">
+    android:background="@color/terminal_black"
+    android:padding="24dp">
 
-    <TextView
-        android:id="@+id/titleText"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="NetScope Scanner"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="30dp"/>
+        android:orientation="vertical"
+        android:layout_marginBottom="20dp">
 
-    <Button
-        android:id="@+id/scanButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Scan 192.168.1.1" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="NETSCOPE"
+            android:fontFamily="monospace"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.1"
+            android:textColor="@color/hacker_green"/>
+
+        <TextView
+            android:id="@+id/titleText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="v1.0 // System Ready"
+            android:fontFamily="monospace"
+            android:textSize="14sp"
+            android:textColor="@color/text_dim"
+            android:layout_marginTop="4dp"/>
+    </LinearLayout>
 
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="20dp">
+        android:background="@drawable/bg_terminal"
+        android:padding="16dp"
+        android:fillViewport="true">
 
         <TextView
             android:id="@+id/resultText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Ready to scan..."
-            android:textSize="16sp"/>
+            android:text="root@android:~$ Waiting for command..."
+            android:fontFamily="monospace"
+            android:textSize="14sp"
+            android:textColor="@color/text_primary"
+            android:lineSpacingExtra="4dp"/>
     </ScrollView>
+
+    <Button
+        android:id="@+id/scanButton"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:layout_marginTop="20dp"
+        android:text="INITIATE SCAN"
+        android:fontFamily="monospace"
+        android:textStyle="bold"
+        android:textSize="16sp"
+        android:backgroundTint="@color/hacker_green"
+        android:textColor="@color/terminal_black"/>
 
 </LinearLayout>

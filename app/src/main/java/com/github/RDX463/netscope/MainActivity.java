@@ -1,6 +1,7 @@
 package com.github.RDX463.netscope;
 
 import android.content.Context;
+import android.text.Html;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.text.format.Formatter;
@@ -46,40 +47,43 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startNetworkDiscovery() {
-        // Clear previous results
+        // 1. Clear screen
         resultText.setText("");
         scanButton.setEnabled(false);
-        scanButton.setText("Scanning Network...");
 
-        // Get the local subnet (e.g., "192.168.1.")
+        // 2. Print initial status in YELLOW
+        printToConsole("root@android:~$ initializing_network_scan...", "#FFFF00");
+
         String subnet = getSubnetAddress();
         if (subnet == null) {
-            resultText.setText("Error: Could not get WiFi details. Are you connected to WiFi?");
+            // 3. Print error in RED
+            printToConsole("ERROR: No WiFi Connection detected.", "#FF5555");
             scanButton.setEnabled(true);
             return;
         }
 
+        // 4. Print target info in CYAN
+        printToConsole("Target Subnet: " + subnet + "0/24", "#58A6FF");
         titleText.setText("Scanning: " + subnet + "X");
 
-        // Start the Subnet Scanner
         SubnetScanner subnetScanner = new SubnetScanner();
         subnetScanner.startDiscovery(subnet, new SubnetScanner.ScanCallback() {
             @Override
             public void onDeviceFound(String ip) {
-                // Update UI immediately when a device is found
-                runOnUiThread(() -> {
-                    resultText.append("Found Device: " + ip + "\n");
-                    triggerPortScan(ip);
-                });
+                // 5. Print found device in WHITE
+                printToConsole("[+] Host Up: " + ip, "#FFFFFF");
+                triggerPortScan(ip);
             }
 
             @Override
             public void onScanFinished() {
+                // 6. Print finish message in GREY
+                printToConsole("--- Scan Complete ---", "#8B949E");
+
                 runOnUiThread(() -> {
                     Toast.makeText(MainActivity.this, "Scan Complete", Toast.LENGTH_SHORT).show();
-                    scanButton.setText("Scan Network");
+                    scanButton.setText("RE-SCAN");
                     scanButton.setEnabled(true);
-                    resultText.append("\n--- Scan Finished ---");
                 });
             }
         });
@@ -132,5 +136,18 @@ public class MainActivity extends AppCompatActivity {
             case 8080: return "HTTP Proxy";
             default: return "Unknown Service";
         }
+    }
+    private void printToConsole(String text, String colorHex) {
+        runOnUiThread(() -> {
+            // Create HTML formatted string: <font color='#00FF41'>TEXT</font><br>
+            String html = "<font color='" + colorHex + "'>" + text + "</font><br>";
+
+            // Append to the TextView (supports HTML rendering)
+            resultText.append(Html.fromHtml(html, Html.FROM_HTML_MODE_LEGACY));
+
+            // Auto-scroll to bottom
+            final android.widget.ScrollView scrollView = (android.widget.ScrollView) resultText.getParent();
+            scrollView.post(() -> scrollView.fullScroll(View.FOCUS_DOWN));
+        });
     }
 }
