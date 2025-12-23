@@ -30,8 +30,10 @@ public class MainActivity extends AppCompatActivity {
     private TextView titleText;
     private boolean isScanning = false;
     private Button copyButton;
+    private Button updateButton; // <--- NEW
+
     private static final String GITHUB_USER = "RDX463"; // CHANGE THIS
-    private static final String CURRENT_VERSION = "v1.2.0";
+    private static final String CURRENT_VERSION = "v1.3.0";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,29 +44,32 @@ public class MainActivity extends AppCompatActivity {
         resultText = findViewById(R.id.resultText);
         scanButton = findViewById(R.id.scanButton);
         titleText = findViewById(R.id.titleText);
-
-        // NEW: Connect the Copy Button
         copyButton = findViewById(R.id.copyButton);
+        updateButton = findViewById(R.id.updateButton);
 
-        // 2. Set Copy Button Action
+        // 2. Set Copy Action
         copyButton.setOnClickListener(v -> copyLogsToClipboard());
 
-        // 3. Set Scan Button Action (Start/Stop Logic)
+        // 3. Set Update Action (Manual Click)
+        updateButton.setOnClickListener(v -> {
+            Toast.makeText(MainActivity.this, "Checking for updates...", Toast.LENGTH_SHORT).show();
+            // Pass 'true' so we know to show a toast if no update is found
+            checkForUpdates(true);
+        });
+
+        // 4. Set Scan Button Action
         scanButton.setOnClickListener(v -> {
             if (isScanning) {
                 // STOP LOGIC
                 isScanning = false;
                 scanButton.setText("RE-SCAN");
-                // Use colored print instead of plain .append
-                printToConsole("[!] Scan Aborted by User.", "#FF5555"); // RED Color
+                printToConsole("[!] Scan Aborted by User.", "#FF5555");
             } else {
                 // START LOGIC
                 isScanning = true;
                 startNetworkDiscovery();
             }
         });
-        // 4. Run Security & Update Checks
-        checkForUpdates();
     }
 
     private void startNetworkDiscovery() {
@@ -90,9 +95,18 @@ public class MainActivity extends AppCompatActivity {
         SubnetScanner subnetScanner = new SubnetScanner();
         subnetScanner.startDiscovery(subnet, new SubnetScanner.ScanCallback() {
             @Override
-            public void onDeviceFound(String ip) {
-                // 5. Print found device in WHITE
-                printToConsole("[+] Host Up: " + ip, "#FFFFFF");
+            public void onDeviceFound(String ip, String hostname) {
+                // Update UI with IP and Name
+                String info = "[+] Host Up: " + ip;
+
+                // Add Hostname in a different color (Cyan) if available
+                if (!hostname.equals("Unknown Device")) {
+                    info += " (" + hostname + ")";
+                    printToConsole(info, "#58A6FF"); // Cyan for named devices
+                } else {
+                    printToConsole(info, "#FFFFFF"); // White for generic IPs
+                }
+
                 triggerPortScan(ip);
             }
 
@@ -100,11 +114,13 @@ public class MainActivity extends AppCompatActivity {
             public void onScanFinished() {
                 // 6. Print finish message in GREY
                 printToConsole("--- Scan Complete ---", "#8B949E");
-
                 runOnUiThread(() -> {
                     Toast.makeText(MainActivity.this, "Scan Complete", Toast.LENGTH_SHORT).show();
                     scanButton.setText("RE-SCAN");
                     scanButton.setEnabled(true);
+
+                    // --- THE FIX FOR "ABORTED" BUG ---
+                    isScanning = false;
                 });
             }
         });
@@ -127,7 +143,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Optional: Only used if you want to deep scan a specific IP
+    // Deep scan a specific IP
     private void triggerPortScan(String targetIp) {
         PortScanner portScanner = new PortScanner();
         portScanner.startScan(targetIp, new PortScanner.ScanCallback() {
@@ -136,10 +152,10 @@ public class MainActivity extends AppCompatActivity {
                 // Get generic name (e.g., "SSH")
                 String service = getServiceName(port);
 
-                // If we grabbed a specific banner (e.g., "OpenSSH 8.9"), use it!
+                // If we grabbed a specific banner use it
                 String displayInfo = (banner.isEmpty()) ? service : banner;
 
-                printToConsole("    ⚠️ PORT " + port + " OPEN: " + displayInfo, "#00FF41");
+                printToConsole("    └── ⚠️ PORT " + port + ": " + displayInfo, "#00FF41");
             }
             @Override
             public void onScanComplete() {
@@ -147,6 +163,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
+
     private String getServiceName(int port) {
         switch (port) {
             case 21: return "FTP (File Transfer)";
@@ -161,6 +178,7 @@ public class MainActivity extends AppCompatActivity {
             default: return "Unknown Service";
         }
     }
+
     private void printToConsole(String text, String colorHex) {
         runOnUiThread(() -> {
             // Create HTML formatted string: <font color='#00FF41'>TEXT</font><br>
@@ -174,6 +192,7 @@ public class MainActivity extends AppCompatActivity {
             scrollView.post(() -> scrollView.fullScroll(View.FOCUS_DOWN));
         });
     }
+
     // FEATURE: Copy Logs
     private void copyLogsToClipboard() {
         android.content.ClipboardManager clipboard = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
@@ -182,9 +201,8 @@ public class MainActivity extends AppCompatActivity {
         Toast.makeText(this, "Logs copied to clipboard!", Toast.LENGTH_SHORT).show();
     }
 
-    // FEATURE: Update Checker
-    // FEATURE: Update Checker
-    private void checkForUpdates() {
+    // FEATURE: Update Checker (FIXED METHOD SIGNATURE)
+    private void checkForUpdates(boolean isManualCheck) {
         new Thread(() -> {
             try {
                 // 1. Fetch JSON from GitHub
@@ -223,12 +241,22 @@ public class MainActivity extends AppCompatActivity {
                         final String finalUrl = downloadUrl;
                         runOnUiThread(() -> showUpdateDialog(serverVersion, finalUrl));
                     }
+                } else {
+                    // MANUAL CHECK: If versions match, tell the user
+                    if (isManualCheck) {
+                        runOnUiThread(() -> Toast.makeText(MainActivity.this, "App is up to date (" + CURRENT_VERSION + ")", Toast.LENGTH_SHORT).show());
+                    }
                 }
             } catch (Exception e) {
-                e.printStackTrace(); // Update check failed
+                // ERROR HANDLING
+                if (isManualCheck) {
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "Update check failed (Offline?)", Toast.LENGTH_SHORT).show());
+                }
+                e.printStackTrace();
             }
         }).start();
     }
+
     private void showUpdateDialog(String newVersion, String downloadUrl) {
         new AlertDialog.Builder(this)
                 .setTitle("Update Available: " + newVersion)
@@ -237,6 +265,7 @@ public class MainActivity extends AppCompatActivity {
                 .setNegativeButton("Later", null)
                 .show();
     }
+
     private void downloadAndInstall(String url) {
         Toast.makeText(this, "Downloading update...", Toast.LENGTH_SHORT).show();
 
@@ -252,7 +281,7 @@ public class MainActivity extends AppCompatActivity {
         DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
         long downloadId = manager.enqueue(request);
 
-        // 3. Listen for completion (SECURE FIX APPLIED HERE)
+        // 3. Listen for completion
         BroadcastReceiver onComplete = new BroadcastReceiver() {
             public void onReceive(Context ctxt, Intent intent) {
                 File file = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "NetScope_Update.apk");
@@ -261,27 +290,24 @@ public class MainActivity extends AppCompatActivity {
             }
         };
 
-        // The Fix: Check Android version to apply the correct flag
+        // Check Android version
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(onComplete, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_EXPORTED);
         } else {
             registerReceiver(onComplete, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
         }
     }
+
     private void installApk(File file) {
         try {
-            // Create secure URI using the FileProvider we set up
             Uri contentUri = FileProvider.getUriForFile(this, getPackageName() + ".provider", file);
-
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(contentUri, "application/vnd.android.package-archive");
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-
             startActivity(intent);
         } catch (Exception e) {
             Toast.makeText(this, "Error opening installer: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
-
 }
