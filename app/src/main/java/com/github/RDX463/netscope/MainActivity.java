@@ -10,14 +10,28 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
+import android.app.AlertDialog;
+import android.app.DownloadManager;
+import android.content.BroadcastReceiver;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.net.Uri;
+import android.os.Environment;
+import androidx.core.content.FileProvider;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.io.File;
+import android.os.Build;
 
 public class MainActivity extends AppCompatActivity {
 
     private TextView resultText;
     private Button scanButton;
     private TextView titleText;
-
     private boolean isScanning = false;
+    private Button copyButton;
+    private static final String GITHUB_USER = "RDX463"; // CHANGE THIS
+    private static final String CURRENT_VERSION = "v1.2.0";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -29,21 +43,28 @@ public class MainActivity extends AppCompatActivity {
         scanButton = findViewById(R.id.scanButton);
         titleText = findViewById(R.id.titleText);
 
-        // 2. Set Button Action
+        // NEW: Connect the Copy Button
+        copyButton = findViewById(R.id.copyButton);
+
+        // 2. Set Copy Button Action
+        copyButton.setOnClickListener(v -> copyLogsToClipboard());
+
+        // 3. Set Scan Button Action (Start/Stop Logic)
         scanButton.setOnClickListener(v -> {
             if (isScanning) {
                 // STOP LOGIC
                 isScanning = false;
-                scanButton.setText("Scan Network");
-                resultText.append("\n[!] Scan Stopped by User.");
-                // Note: Threads will finish their current task and then stop
-                // because we will check 'isScanning' inside the loops.
+                scanButton.setText("RE-SCAN");
+                // Use colored print instead of plain .append
+                printToConsole("[!] Scan Aborted by User.", "#FF5555"); // RED Color
             } else {
                 // START LOGIC
                 isScanning = true;
                 startNetworkDiscovery();
             }
         });
+        // 4. Run Security & Update Checks
+        checkForUpdates();
     }
 
     private void startNetworkDiscovery() {
@@ -111,15 +132,18 @@ public class MainActivity extends AppCompatActivity {
         PortScanner portScanner = new PortScanner();
         portScanner.startScan(targetIp, new PortScanner.ScanCallback() {
             @Override
-            public void onPortOpen(int port) {
+            public void onPortOpen(int port, String banner) {
+                // Get generic name (e.g., "SSH")
                 String service = getServiceName(port);
-                runOnUiThread(() ->
-                        resultText.append("   ⚠️ [" + targetIp + "] OPEN: " + port + " - " + service + "\n")
-                );
+
+                // If we grabbed a specific banner (e.g., "OpenSSH 8.9"), use it!
+                String displayInfo = (banner.isEmpty()) ? service : banner;
+
+                printToConsole("    ⚠️ PORT " + port + " OPEN: " + displayInfo, "#00FF41");
             }
             @Override
             public void onScanComplete() {
-                // Optional: Log that this specific IP is finished
+                // Done
             }
         });
     }
@@ -150,4 +174,114 @@ public class MainActivity extends AppCompatActivity {
             scrollView.post(() -> scrollView.fullScroll(View.FOCUS_DOWN));
         });
     }
+    // FEATURE: Copy Logs
+    private void copyLogsToClipboard() {
+        android.content.ClipboardManager clipboard = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        android.content.ClipData clip = android.content.ClipData.newPlainText("NetScope Scan", resultText.getText());
+        clipboard.setPrimaryClip(clip);
+        Toast.makeText(this, "Logs copied to clipboard!", Toast.LENGTH_SHORT).show();
+    }
+
+    // FEATURE: Update Checker
+    // FEATURE: Update Checker
+    private void checkForUpdates() {
+        new Thread(() -> {
+            try {
+                // 1. Fetch JSON from GitHub
+                java.net.URL url = new java.net.URL("https://api.github.com/repos/" + GITHUB_USER + "/NetScope-Android-Scanner/releases/latest");
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setRequestProperty("Accept", "application/vnd.github.v3+json");
+
+                java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(conn.getInputStream()));
+                StringBuilder response = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) response.append(line);
+
+                // 2. Parse JSON
+                JSONObject json = new JSONObject(response.toString());
+                String serverVersion = json.getString("tag_name");
+
+                // Check version match
+                if (!serverVersion.equals(CURRENT_VERSION)) {
+                    // Get the assets array ONCE
+                    JSONArray assets = json.getJSONArray("assets");
+                    String downloadUrl = "";
+
+                    // LOOP to find the actual APK file
+                    for (int i = 0; i < assets.length(); i++) {
+                        JSONObject asset = assets.getJSONObject(i);
+                        String fileName = asset.getString("name");
+                        if (fileName.endsWith(".apk")) {
+                            downloadUrl = asset.getString("browser_download_url");
+                            break; // Found it!
+                        }
+                    }
+
+                    // Only proceed if we found a valid APK url
+                    if (!downloadUrl.isEmpty()) {
+                        final String finalUrl = downloadUrl;
+                        runOnUiThread(() -> showUpdateDialog(serverVersion, finalUrl));
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace(); // Update check failed
+            }
+        }).start();
+    }
+    private void showUpdateDialog(String newVersion, String downloadUrl) {
+        new AlertDialog.Builder(this)
+                .setTitle("Update Available: " + newVersion)
+                .setMessage("A new version of NetScope is available. Would you like to download and install it now?")
+                .setPositiveButton("Update Now", (dialog, which) -> downloadAndInstall(downloadUrl))
+                .setNegativeButton("Later", null)
+                .show();
+    }
+    private void downloadAndInstall(String url) {
+        Toast.makeText(this, "Downloading update...", Toast.LENGTH_SHORT).show();
+
+        // 1. Prepare Download Request
+        DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+        request.setTitle("NetScope Update");
+        request.setDescription("Downloading " + url);
+        request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+        request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "NetScope_Update.apk");
+        request.setMimeType("application/vnd.android.package-archive");
+
+        // 2. Start Download
+        DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+        long downloadId = manager.enqueue(request);
+
+        // 3. Listen for completion (SECURE FIX APPLIED HERE)
+        BroadcastReceiver onComplete = new BroadcastReceiver() {
+            public void onReceive(Context ctxt, Intent intent) {
+                File file = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "NetScope_Update.apk");
+                installApk(file);
+                unregisterReceiver(this);
+            }
+        };
+
+        // The Fix: Check Android version to apply the correct flag
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(onComplete, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_EXPORTED);
+        } else {
+            registerReceiver(onComplete, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+        }
+    }
+    private void installApk(File file) {
+        try {
+            // Create secure URI using the FileProvider we set up
+            Uri contentUri = FileProvider.getUriForFile(this, getPackageName() + ".provider", file);
+
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(contentUri, "application/vnd.android.package-archive");
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+            startActivity(intent);
+        } catch (Exception e) {
+            Toast.makeText(this, "Error opening installer: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
 }
